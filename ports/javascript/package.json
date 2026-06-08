@@ -1,0 +1,10 @@
+{
+  "name": "@cognis/sigsleuth",
+  "version": "0.2.0",
+  "description": "JavaScript port of sigsleuth (Cognis Neural Suite)",
+  "bin": {
+    "sigsleuth": "index.js"
+  },
+  "license": "LicenseRef-COCL-1.0",
+  "type": "module"
+}
