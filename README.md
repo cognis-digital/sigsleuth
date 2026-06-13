@@ -20,6 +20,32 @@ pip install cognis-sigsleuth
 sigsleuth scan .            # → prioritized findings in seconds
 ```
 
+## Usage — step by step
+
+`sigsleuth` decodes raw EVM calldata and EIP-712 typed data into human-readable intent and flags risky patterns. Console script: `sigsleuth`.
+
+1. **Install**:
+   ```bash
+   pipx install sigsleuth     # or: pip install sigsleuth
+   ```
+2. **Decode raw calldata** (e.g. an ERC-20 transfer) — the `--format` flag is global, before the subcommand:
+   ```bash
+   sigsleuth calldata 0xa9059cbb000000000000000000000000ab5801a7d398351b8be11c439e05c5b3259aec9b00000000000000000000000000000000000000000000000000000000000f4240
+   ```
+3. **Decode from a file or stdin**, and add an extra ABI signature so a custom selector is recognized:
+   ```bash
+   sigsleuth calldata --file payload.hex --sig 'foo(uint256)'
+   cat payload.hex | sigsleuth calldata
+   ```
+4. **Decode EIP-712 typed data** and compute the signing hash, as JSON for piping:
+   ```bash
+   sigsleuth --format json eip712 --file permit.json | jq '.signingHash'
+   ```
+5. **Use it as a wallet/CI signing gate** — exit `0` = clean, `2` = risk findings present, `1` = undecodable:
+   ```bash
+   sigsleuth calldata --file payload.hex; test $? -ne 2 || echo "RISK: refusing to sign"
+   ```
+
 ## Contents
 
 - [Why sigsleuth?](#why) · [Features](#features) · [Quick start](#quick-start) · [Example](#example) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [Related](#related) · [Contributing](#contributing)
