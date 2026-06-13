@@ -114,6 +114,13 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("selector", help="compute the 4-byte selector for an ABI signature")
     ps.add_argument("signature", help="e.g. 'transfer(address,uint256)'")
 
+    # accept --format after the subcommand too (SUPPRESS so the subparser
+    # doesn't overwrite a value already parsed at the top level)
+    for spx in (pc, pe, ps):
+        spx.add_argument("--format", choices=["table", "json"],
+                         default=argparse.SUPPRESS,
+                         help="output format (default: table)")
+
     return p
 
 
