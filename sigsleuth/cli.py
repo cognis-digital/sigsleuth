@@ -114,6 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("selector", help="compute the 4-byte selector for an ABI signature")
     ps.add_argument("signature", help="e.g. 'transfer(address,uint256)'")
 
+    # also accept --format after the subcommand (SUPPRESS so it doesn't clobber the global)
+    for _sp in (pc, pe, ps):
+        _sp.add_argument("--format", choices=["table", "json"], default=argparse.SUPPRESS,
+                         help="output format (default: table)")
+
     return p
 
 
