@@ -130,3 +130,85 @@ def test_cli_calldata_risk_exit_code():
 def test_cli_unknown_exit_code():
     p = _run_cli(["calldata", "0xdeadbeef"])
     assert p.returncode == 1
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests: error paths, edge cases, input validation
+# ---------------------------------------------------------------------------
+
+def test_cli_missing_file_exit_and_stderr():
+    """--file pointing to a nonexistent path must exit non-zero with a clear message."""
+    p = _run_cli(["calldata", "--file", "/nonexistent/path/calldata.hex"])
+    assert p.returncode != 0
+    assert "error" in p.stderr.lower() or "not found" in p.stderr.lower() or "file" in p.stderr.lower()
+
+
+def test_calldata_too_short():
+    """Calldata shorter than 4 bytes must raise SigsleuthError."""
+    with pytest.raises(SigsleuthError, match="too short"):
+        decode_calldata("0xab")
+
+
+def test_calldata_empty_string():
+    """Completely empty (after strip) calldata must raise SigsleuthError."""
+    with pytest.raises(SigsleuthError):
+        decode_calldata("")
+
+
+def test_calldata_non_hex():
+    """Non-hex characters must raise SigsleuthError, not a raw ValueError."""
+    with pytest.raises(SigsleuthError):
+        decode_calldata("0xGGGGGGGG")
+
+
+def test_eip712_malformed_json_raises():
+    """A malformed JSON string must raise SigsleuthError, not json.JSONDecodeError."""
+    with pytest.raises(SigsleuthError, match="invalid EIP-712 JSON"):
+        decode_eip712("{not valid json")
+
+
+def test_eip712_missing_message_field():
+    """An EIP-712 payload that references a field not present in message must raise SigsleuthError."""
+    payload = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+            ],
+            "MyStruct": [
+                {"name": "owner", "type": "address"},
+                {"name": "value", "type": "uint256"},
+            ],
+        },
+        "primaryType": "MyStruct",
+        "domain": {"name": "TestApp", "chainId": 1},
+        # message is deliberately missing the "value" field
+        "message": {"owner": "0xab5801a7d398351b8be11c439e05c5b3259aec9b"},
+    }
+    with pytest.raises(SigsleuthError, match="missing required field"):
+        decode_eip712(payload)
+
+
+def test_eip712_missing_required_key():
+    """EIP-712 payload missing a top-level required key must raise SigsleuthError."""
+    with pytest.raises(SigsleuthError, match="missing"):
+        decode_eip712({"types": {}, "primaryType": "Foo", "domain": {}})
+        # "message" key missing
+
+
+def test_selector_of_empty_raises():
+    """selector_of with an empty string must raise SigsleuthError."""
+    with pytest.raises(SigsleuthError):
+        selector_of("")
+
+
+def test_selector_of_no_parens_raises():
+    """selector_of with a signature lacking parentheses must raise SigsleuthError."""
+    with pytest.raises(SigsleuthError):
+        selector_of("transferaddressuint256")
+
+
+def test_decode_calldata_invalid_extra_sig():
+    """An extra signature with no parentheses must raise SigsleuthError, not a traceback."""
+    with pytest.raises(SigsleuthError):
+        decode_calldata("0xa9059cbb" + "00" * 64, signatures=["notAnABISig"])

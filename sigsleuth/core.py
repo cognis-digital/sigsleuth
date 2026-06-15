@@ -80,7 +80,11 @@ def keccak256(data: bytes) -> bytes:
 
 def selector_of(signature: str) -> str:
     """Return the 4-byte function selector (0x-prefixed hex) for an ABI signature."""
+    if not isinstance(signature, str) or not signature.strip():
+        raise SigsleuthError("ABI signature must be a non-empty string")
     sig = re.sub(r"\s+", "", signature)
+    if "(" not in sig:
+        raise SigsleuthError(f"ABI signature missing parentheses: {signature!r}")
     return "0x" + keccak256(sig.encode()).hex()[:8]
 
 
@@ -113,8 +117,12 @@ _UINT256_MAX = (1 << 256) - 1
 
 
 def _parse_types(sig: str) -> Tuple[str, List[str]]:
+    if "(" not in sig or ")" not in sig:
+        raise SigsleuthError(f"invalid ABI signature (missing parentheses): {sig!r}")
     name = sig[: sig.index("(")]
     inner = sig[sig.index("(") + 1: sig.rindex(")")]
+    if not name:
+        raise SigsleuthError(f"invalid ABI signature (empty function name): {sig!r}")
     if not inner:
         return name, []
     # split top-level commas (no nested tuples in our DB beyond arrays)
@@ -169,10 +177,17 @@ def _decode_one(typ: str, data: bytes, head_idx: int) -> Any:
     return "0x" + word.hex()
 
 
+_MAX_ARRAY_LENGTH = 65536  # guard against memory exhaustion on malformed calldata
+
+
 def _decode_dyn_array(data: bytes, offset: int, elem: str) -> List[Any]:
     if offset + 32 > len(data):
         raise SigsleuthError("dynamic array offset out of range")
     length = int.from_bytes(data[offset:offset + 32], "big")
+    if length > _MAX_ARRAY_LENGTH:
+        raise SigsleuthError(
+            f"dynamic array length {length} exceeds safety limit {_MAX_ARRAY_LENGTH}"
+        )
     out = []
     base = offset + 32
     for i in range(length):
@@ -236,6 +251,12 @@ def decode_calldata(calldata: str, signatures: Optional[List[str]] = None) -> Di
     db = dict(KNOWN_SELECTORS)
     if signatures:
         for s in signatures:
+            if not isinstance(s, str) or not s.strip():
+                raise SigsleuthError(f"invalid extra signature (must be non-empty string): {s!r}")
+            try:
+                _parse_types(re.sub(r"\s+", "", s))  # validate structure before hashing
+            except SigsleuthError:
+                raise SigsleuthError(f"invalid ABI signature: {s!r}")
             db[selector_of(s)] = re.sub(r"\s+", "", s)
 
     result: Dict[str, Any] = {
@@ -302,8 +323,16 @@ def _type_hash(primary: str, types: Dict[str, List[Dict[str, str]]]) -> bytes:
 
 def _encode_value(typ: str, value: Any, types: Dict[str, List[Dict[str, str]]]) -> bytes:
     if typ in types:
+        if not isinstance(value, dict):
+            raise SigsleuthError(
+                f"EIP-712 field of struct type {typ!r} must be an object, got {type(value).__name__}"
+            )
         return _hash_struct(typ, value, types)
     if typ.endswith("]"):
+        if value is None or not hasattr(value, "__iter__") or isinstance(value, (str, bytes)):
+            raise SigsleuthError(
+                f"EIP-712 array field {typ!r} must be a list, got {type(value).__name__!r}"
+            )
         base = typ[: typ.rindex("[")]
         encoded = b"".join(_encode_value(base, v, types) for v in value)
         return keccak256(encoded)
@@ -325,9 +354,25 @@ def _encode_value(typ: str, value: Any, types: Dict[str, List[Dict[str, str]]]) 
 
 
 def _hash_struct(primary: str, data: Dict[str, Any], types: Dict[str, List[Dict[str, str]]]) -> bytes:
+    if primary not in types:
+        raise SigsleuthError(f"EIP-712 struct type {primary!r} not defined in 'types'")
+    if not isinstance(data, dict):
+        raise SigsleuthError(
+            f"EIP-712 data for struct {primary!r} must be an object, got {type(data).__name__}"
+        )
     enc = _type_hash(primary, types)
     for field in types[primary]:
-        enc += _encode_value(field["type"], data[field["name"]], types)
+        fname = field.get("name")
+        ftype = field.get("type")
+        if not fname or not ftype:
+            raise SigsleuthError(
+                f"EIP-712 type definition for {primary!r} has a field missing 'name' or 'type'"
+            )
+        if fname not in data:
+            raise SigsleuthError(
+                f"EIP-712 message is missing required field {fname!r} (type {ftype!r})"
+            )
+        enc += _encode_value(ftype, data[fname], types)
     return keccak256(enc)
 
 
@@ -352,6 +397,19 @@ def decode_eip712(payload: Any) -> Dict[str, Any]:
     primary = payload["primaryType"]
     domain = payload["domain"]
     message = payload["message"]
+
+    if not isinstance(types, dict):
+        raise SigsleuthError("EIP-712 'types' must be an object")
+    if not isinstance(primary, str) or not primary:
+        raise SigsleuthError("EIP-712 'primaryType' must be a non-empty string")
+    if not isinstance(domain, dict):
+        raise SigsleuthError("EIP-712 'domain' must be an object")
+    if not isinstance(message, dict):
+        raise SigsleuthError("EIP-712 'message' must be an object")
+    if primary not in types and primary != "EIP712Domain":
+        raise SigsleuthError(
+            f"EIP-712 primaryType {primary!r} not found in 'types'"
+        )
 
     if "EIP712Domain" not in types:
         # Derive a minimal domain type from present keys (common in real wallets).

@@ -28,8 +28,15 @@ from .core import decode_calldata, decode_eip712, SigsleuthError
 
 def _read_input(value: Optional[str], file: Optional[str], stream) -> str:
     if file:
-        with open(file, "r", encoding="utf-8") as fh:
-            return fh.read().strip()
+        try:
+            with open(file, "r", encoding="utf-8") as fh:
+                return fh.read().strip()
+        except FileNotFoundError:
+            raise SigsleuthError(f"file not found: {file!r}")
+        except PermissionError:
+            raise SigsleuthError(f"permission denied reading file: {file!r}")
+        except OSError as exc:
+            raise SigsleuthError(f"could not read file {file!r}: {exc}") from exc
     if value:
         return value
     data = stream.read().strip()
@@ -151,8 +158,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     except SigsleuthError as e:
         sys.stderr.write(f"error: {e}\n")
         return 1
-    except FileNotFoundError as e:
-        sys.stderr.write(f"error: file not found: {e.filename}\n")
+    except KeyboardInterrupt:
+        sys.stderr.write("interrupted\n")
+        return 1
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"unexpected error: {type(e).__name__}: {e}\n")
         return 1
 
     _emit(result, args.format, sys.stdout)
