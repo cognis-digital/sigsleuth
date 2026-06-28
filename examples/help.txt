@@ -1,0 +1,19 @@
+$ sigsleuth-emit --help
+
+usage: sigsleuth [-h] [--version] [--format {table,json}] COMMAND ...
+
+Decode raw EVM calldata and EIP-712 typed data into human-readable intent.
+
+positional arguments:
+  COMMAND
+    calldata            decode raw hex calldata
+    eip712              decode EIP-712 typed data + compute signing hash
+    selector            compute the 4-byte selector for an ABI signature
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --format {table,json}
+                        output format (default: table)
+
+Exit: 0=clean, 2=risk findings, 1=undecodable. Use for wallet/CI signing gates.

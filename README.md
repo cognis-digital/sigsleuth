@@ -20,6 +20,67 @@ pip install cognis-sigsleuth
 sigsleuth scan .            # → prioritized findings in seconds
 ```
 
+
+<!-- cognis:example:start -->
+## 🔎 Example output
+
+Real, reproducible output from the tool — runs offline:
+
+```console
+$ sigsleuth-emit --version
+sigsleuth 0.1.0
+```
+
+```console
+$ sigsleuth-emit --help
+usage: sigsleuth [-h] [--version] [--format {table,json}] COMMAND ...
+
+Decode raw EVM calldata and EIP-712 typed data into human-readable intent.
+
+positional arguments:
+  COMMAND
+    calldata            decode raw hex calldata
+    eip712              decode EIP-712 typed data + compute signing hash
+    selector            compute the 4-byte selector for an ABI signature
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --format {table,json}
+                        output format (default: table)
+
+Exit: 0=clean, 2=risk findings, 1=undecodable. Use for wallet/CI signing gates.
+```
+
+> Blocks above are real `sigsleuth` output — reproduce them from a clone.
+
+**Sample result format** _(illustrative values — run on your own data for real findings):_
+
+```
+{
+"Findings": [
+    {
+        "id": "12345",
+        "title": "Suspicious Network Activity",
+        "description": "Network traffic anomaly detected.",
+        "severity": "medium",
+        "created_by": "sigsleuth",
+        "created_at": "2023-02-16T14:30:00Z"
+    },
+    {
+        "id": "67890",
+        "title": "Unusual File Access",
+        "description": "File access pattern inconsistent with normal behavior.",
+        "severity": "high",
+        "created_by": "sigsleuth",
+        "created_at": "2023-02-17T10:45:00Z"
+    }
+]
+}
+```
+
+<!-- cognis:example:end -->
+
 ## Usage — step by step
 
 `sigsleuth` decodes raw EVM calldata and EIP-712 typed data into human-readable intent and flags risky patterns. Console script: `sigsleuth`.

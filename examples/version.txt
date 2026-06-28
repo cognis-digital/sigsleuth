@@ -1,0 +1,3 @@
+$ sigsleuth-emit --version
+
+sigsleuth 0.1.0
